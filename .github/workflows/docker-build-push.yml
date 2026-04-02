@@ -1,0 +1,103 @@
+name: Build and Push Docker Images to GHCR
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      # 当 .Dockerfile. 结尾或中间包含此字符的文件被修改时，触发工作流
+      - '**.Dockerfile.**'
+  # 允许手动在 Actions 页面触发
+  workflow_dispatch:
+
+# 设置权限以允许工作流向 GHCR 推送镜像
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  # 准备阶段：动态寻找所有的 Dockerfile 并生成矩阵 (Matrix)
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find Dockerfiles and generate matrix
+        id: set-matrix
+        run: |
+          echo "[]" > matrix.json
+          
+          # 遍历当前目录下所有符合 *.Dockerfile.* 的文件
+          for file in *.Dockerfile.*; do
+            if [ -f "$file" ]; then
+              # 使用 bash 字符串截取提取 name 和 version
+              name="${file%%.Dockerfile.*}"
+              version="${file##*.Dockerfile.}"
+              
+              # 将找到的参数拼接到 JSON 数组中供后续的 Matrix Job 使用
+              jq --arg f "$file" --arg n "$name" --arg v "$version" \
+                '. += [{"file": $f, "name": $n, "version": $v}]' matrix.json > tmp.json && mv tmp.json matrix.json
+            fi
+          done
+          
+          echo "Generated matrix:"
+          cat matrix.json
+          
+          # 压缩 JSON 并输出
+          echo "matrix=$(cat matrix.json | jq -c .)" >> $GITHUB_OUTPUT
+
+  # 构建和推送阶段：根据前面找到的 Dockerfile 列表并行构建
+  build-and-push:
+    needs: prepare
+    runs-on: ubuntu-latest
+    # 如果没有找到任何相关的 Dockerfile 则跳过该任务
+    if: ${{ needs.prepare.outputs.matrix != '[]' && needs.prepare.outputs.matrix != '' }}
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
+      # fail-fast 设为 false 表示如果某个镜像构建失败，不影响其他镜像继续构建
+      fail-fast: false
+      
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to the Container registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # 这里的 GITHUB_TOKEN 是 Actions 自动注入的，不需要你手动设置 secrets
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        run: |
+          # 确保 GitHub 用户名为小写，因为 Docker 镜像名称不允许大写字母
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_NAME="ghcr.io/$OWNER/${{ matrix.name }}"
+          # 生成当天的构建日期 (UTC时间)
+          BUILD_DATE=$(date -u +'%Y%m%d')
+          
+          echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
+          # 按照要求输出: (version)-(builddate)
+          echo "tag=${{ matrix.version }}-$BUILD_DATE" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.file }}
+          push: true
+          # 按照 (name):(version)-(builddate) 格式推送。
+          # 我额外加上了基础的 (version) 标签，这样使用者每次都能拉取到某个 version 的最新版。
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
+            ${{ steps.meta.outputs.image }}:${{ matrix.version }}
