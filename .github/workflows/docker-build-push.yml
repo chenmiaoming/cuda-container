@@ -24,7 +24,7 @@ jobs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Find Dockerfiles and generate matrix
         id: set-matrix
@@ -64,13 +64,13 @@ jobs:
       
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to the Container registry (GHCR)
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -91,13 +91,17 @@ jobs:
           echo "tag=${{ matrix.version }}-$BUILD_DATE" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.file }}
           push: true
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
           # 按照 (name):(version)-(builddate) 格式推送。
           # 我额外加上了基础的 (version) 标签，这样使用者每次都能拉取到某个 version 的最新版。
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:${{ matrix.version }}
+            ${{ steps.meta.outputs.image }}:latest
