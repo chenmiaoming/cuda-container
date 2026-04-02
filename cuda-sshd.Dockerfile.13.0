@@ -25,7 +25,7 @@ RUN echo ". ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate base" >> /etc/
 RUN echo "root:password" | chpasswd     
 RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
     mkdir -p /var/run/sshd
-COPY cuda13.env /etc/environment
+COPY cuda13.0.env /etc/environment
 
 EXPOSE 22
 ENTRYPOINT ["tini", "--"]
