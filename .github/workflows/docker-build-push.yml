@@ -31,18 +31,29 @@ jobs:
         run: |
           echo "[]" > matrix.json
           
-          # 遍历当前目录下所有符合 *.Dockerfile.* 的文件
-          for file in *.Dockerfile.*; do
-            if [ -f "$file" ]; then
-              # 使用 bash 字符串截取提取 name 和 version
-              name="${file%%.Dockerfile.*}"
-              version="${file##*.Dockerfile.}"
-              
-              # 将找到的参数拼接到 JSON 数组中供后续的 Matrix Job 使用
-              jq --arg f "$file" --arg n "$name" --arg v "$version" \
-                '. += [{"file": $f, "name": $n, "version": $v}]' matrix.json > tmp.json && mv tmp.json matrix.json
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            files=$(ls *.Dockerfile.* 2>/dev/null || true)
+          else
+            before="${{ github.event.before }}"
+            after="${{ github.sha }}"
+            if [ "$before" = "0000000000000000000000000000000000000000" ]; then
+              files=$(git ls-files '*.Dockerfile.*')
+            else
+              files=$(git diff --name-only --diff-filter=AM "$before" "$after" -- '*.Dockerfile.*')
             fi
-          done
+          fi
+
+          if [ -n "$files" ]; then
+            for file in $files; do
+              if [ -f "$file" ]; then
+                name="${file%%.Dockerfile.*}"
+                version="${file##*.Dockerfile.}"
+
+                jq --arg f "$file" --arg n "$name" --arg v "$version" \
+                  '. += [{"file": $f, "name": $n, "version": $v}]' matrix.json > tmp.json && mv tmp.json matrix.json
+              fi
+            done
+          fi
           
           echo "Generated matrix:"
           cat matrix.json
