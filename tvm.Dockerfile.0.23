@@ -9,7 +9,9 @@ ENV PIP_NO_CACHE_DIR=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTORCH_INDEX_URL=https://download.pytorch.org/whl/${PYTORCH_CUDA}
 ENV TVM_LIBRARY_PATH=/opt/tvm/build
-ENV PYTHONPATH=/opt/tvm/python:${PYTHONPATH}
+ENV PYTHONPATH=/opt/tvm/python
+ENV VENV_DIR=/opt/tvm-venv
+ENV PATH=/opt/tvm-venv/bin:${PATH}
 ENV LLVM_CONFIG=/opt/llvm/bin/llvm-config
 ENV LD_LIBRARY_PATH=/opt/tvm/build:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 
@@ -34,8 +36,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python3 -m pip install --upgrade pip setuptools wheel && \
-    python3 -m pip install numpy cython tornado psutil 'xgboost>=1.1.0' cloudpickle
+RUN python3 -m venv ${VENV_DIR} && \
+    ${VENV_DIR}/bin/python -m pip install --upgrade pip setuptools wheel && \
+    ${VENV_DIR}/bin/python -m pip install numpy cython tornado psutil 'xgboost>=1.1.0' cloudpickle
 
 RUN git clone --branch release/21.x --depth 1 https://github.com/llvm/llvm-project.git /opt/llvm-project && \
     cmake -S /opt/llvm-project/llvm -B /opt/llvm-project/build -G Ninja \
@@ -53,7 +56,7 @@ RUN git clone --branch ${TVM_REF} --depth 1 https://github.com/apache/tvm.git ${
     cd ${TVM_HOME} && \
     git submodule update --init --recursive
 
-RUN python3 -m pip install -r ${TVM_HOME}/python/requirements.txt && \
+RUN ${VENV_DIR}/bin/python -m pip install -r ${TVM_HOME}/python/requirements.txt && \
     cmake -S ${TVM_HOME} -B ${TVM_HOME}/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_CUDA=ON \
@@ -63,9 +66,9 @@ RUN python3 -m pip install -r ${TVM_HOME}/python/requirements.txt && \
     cmake --build ${TVM_HOME}/build -j $(nproc) && \
     test -f ${TVM_HOME}/build/libtvm.so && \
     test -f ${TVM_HOME}/build/libtvm_runtime.so && \
-    python3 -m pip install ${TVM_HOME}/3rdparty/tvm-ffi && \
-    python3 -m pip install -e ${TVM_HOME}/python
+    ${VENV_DIR}/bin/python -m pip install ${TVM_HOME}/3rdparty/tvm-ffi && \
+    ${VENV_DIR}/bin/python -m pip install -e ${TVM_HOME}/python
 
-RUN python3 -m pip install --index-url ${PYTORCH_INDEX_URL} torch torchvision torchaudio
+RUN ${VENV_DIR}/bin/python -m pip install --index-url ${PYTORCH_INDEX_URL} torch torchvision torchaudio
 
 WORKDIR ${TVM_HOME}
