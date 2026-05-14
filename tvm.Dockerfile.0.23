@@ -32,7 +32,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libffi-dev \
     libopenblas-dev \
     libxml2-dev \
-    libzstd-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
@@ -46,7 +45,7 @@ RUN git clone --branch release/21.x --depth 1 https://github.com/llvm/llvm-proje
         -DLLVM_ENABLE_RTTI=ON \
         -DLLVM_TARGETS_TO_BUILD="X86;NVPTX" \
         -DLLVM_ENABLE_ZLIB=ON \
-        -DLLVM_ENABLE_ZSTD=ON \
+        -DLLVM_ENABLE_ZSTD=OFF \
         -DCMAKE_INSTALL_PREFIX=/opt/llvm && \
     cmake --build /opt/llvm-project/build -j $(nproc) && \
     cmake --install /opt/llvm-project/build && \
