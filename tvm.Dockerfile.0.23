@@ -56,8 +56,7 @@ RUN git clone --branch ${TVM_REF} --depth 1 https://github.com/apache/tvm.git ${
     cd ${TVM_HOME} && \
     git submodule update --init --recursive
 
-RUN ${VENV_DIR}/bin/python -m pip install -r ${TVM_HOME}/python/requirements.txt && \
-    cmake -S ${TVM_HOME} -B ${TVM_HOME}/build -G Ninja \
+RUN cmake -S ${TVM_HOME} -B ${TVM_HOME}/build -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_CUDA=ON \
         -DUSE_CUDNN=ON \
