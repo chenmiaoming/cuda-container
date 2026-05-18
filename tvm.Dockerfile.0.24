@@ -63,7 +63,11 @@ RUN cmake -S ${TVM_HOME} -B ${TVM_HOME}/build -G Ninja \
     -DUSE_RPC=ON && \
     cmake --build ${TVM_HOME}/build -j $(nproc) && \
     ${VENV_DIR}/bin/python -m pip install ${TVM_HOME}/3rdparty/tvm-ffi && \
-    ${VENV_DIR}/bin/python -m pip install -e ${TVM_HOME}/python
+    if [ -f ${TVM_HOME}/python/setup.py ] || [ -f ${TVM_HOME}/python/pyproject.toml ]; then \
+    ${VENV_DIR}/bin/python -m pip install -e ${TVM_HOME}/python; \
+    else \
+    ${VENV_DIR}/bin/python -m pip install -e ${TVM_HOME}; \
+    fi
 
 RUN ${VENV_DIR}/bin/python -m pip install --index-url ${PYTORCH_INDEX_URL} torch torchvision torchaudio
 
