@@ -6,8 +6,8 @@ on:
       - main
       - master
     paths:
-      # 当 .Dockerfile. 结尾或中间包含此字符的文件被修改时，触发工作流
-      - '**.Dockerfile.**'
+      # 当以 .Dockerfile 结尾的文件被修改时，触发工作流
+      - '**/*.Dockerfile'
   # 允许手动在 Actions 页面触发
   workflow_dispatch:
 
@@ -34,22 +34,23 @@ jobs:
           echo "[]" > matrix.json
           
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            files=$(ls *.Dockerfile.* 2>/dev/null || true)
+            files=$(ls *.Dockerfile 2>/dev/null || true)
           else
             before="${{ github.event.before }}"
             after="${{ github.sha }}"
             if [ "$before" = "0000000000000000000000000000000000000000" ]; then
-              files=$(git ls-files '*.Dockerfile.*')
+              files=$(git ls-files '*.Dockerfile')
             else
-              files=$(git diff --name-only --diff-filter=AM "$before" "$after" -- '*.Dockerfile.*')
+              files=$(git diff --name-only --diff-filter=AM "$before" "$after" -- '*.Dockerfile')
             fi
           fi
 
           if [ -n "$files" ]; then
             for file in $files; do
               if [ -f "$file" ]; then
-                name="${file%%.Dockerfile.*}"
-                version="${file##*.Dockerfile.}"
+                base="${file%.Dockerfile}"
+                name="${base%-*}"
+                version="${base##*-}"
 
                 jq --arg f "$file" --arg n "$name" --arg v "$version" \
                   '. += [{"file": $f, "name": $n, "version": $v}]' matrix.json > tmp.json && mv tmp.json matrix.json
@@ -110,6 +111,8 @@ jobs:
           file: ${{ matrix.file }}
           push: true
           platforms: linux/amd64
+          cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.version }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.version }}
           provenance: false
           sbom: false
           # 按照 (name):(version)-(builddate) 格式推送。
