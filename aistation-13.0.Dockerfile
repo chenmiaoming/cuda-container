@@ -11,10 +11,10 @@ ENV PIP_NO_CACHE_DIR=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTORCH_INDEX_URL=https://download.pytorch.org/whl/${PYTORCH_CUDA}
 ENV TVM_HOME=/opt/tvm
-ENV TVM_LIBRARY_PATH=/opt/tvm/build
+ENV TVM_LIBRARY_PATH=/opt/tvm/build/lib
 ENV PYTHONPATH=/opt/tvm/python
 ENV LLVM_CONFIG=/opt/llvm/bin/llvm-config
-ENV LD_LIBRARY_PATH=/opt/tvm/build:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/opt/tvm/build/lib:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
 ENV PATH=${CONDA_DIR}/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recommends \
@@ -45,11 +45,11 @@ RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recomme
     libopenblas-dev \
     libxml2-dev \
     pkg-config \
-    && apt-get clean && rm -rf /var/lib/apt/lists/* \
     && apt-mark hold \
     libcudnn9-cuda-13 \
     libcudnn9-dev-cuda-13 \
-    libcudnn9-headers-cuda-13 
+    libcudnn9-headers-cuda-13 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* 
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget gnupg && \
     . /etc/os-release && \
@@ -99,14 +99,12 @@ RUN cmake -S ${TVM_HOME} -B ${TVM_HOME}/build -G Ninja \
     -DUSE_LLVM=${LLVM_CONFIG} \
     -DUSE_RPC=ON && \
     cmake --build ${TVM_HOME}/build -j $(nproc) && \
-    test -f ${TVM_HOME}/build/libtvm.so && \
-    test -f ${TVM_HOME}/build/libtvm_runtime.so && \
+    test -f ${TVM_HOME}/build/lib/libtvm_compiler.so && \
+    test -f ${TVM_HOME}/build/lib/libtvm_runtime.so && \
+    test -f ${TVM_HOME}/build/lib/libtvm_runtime_cuda.so && \
+    test -f ${TVM_HOME}/build/lib/libtvm_runtime_extra.so && \
     python -m pip install ${TVM_HOME}/3rdparty/tvm-ffi && \
-    if [ -f ${TVM_HOME}/python/setup.py ] || [ -f ${TVM_HOME}/python/pyproject.toml ]; then \
-    python -m pip install -e ${TVM_HOME}/python; \
-    else \
-    python -m pip install -e ${TVM_HOME}; \
-    fi
+    python -m pip install -e ${TVM_HOME};
 
 RUN python -m pip install --index-url ${PYTORCH_INDEX_URL} torch torchvision torchaudio && \
     python -m pip install vllm==${VLLM_VERSION}
@@ -126,11 +124,11 @@ RUN printf '%s\n' \
     'NVIDIA_PRODUCT_NAME=CUDA' \
     'NVARCH=x86_64' \
     'TVM_HOME=/opt/tvm' \
-    'TVM_LIBRARY_PATH=/opt/tvm/build' \
+    'TVM_LIBRARY_PATH=/opt/tvm/build/lib' \
     'PYTHONPATH=/opt/tvm/python' \
     'CONDA_DIR=/opt/conda' \
     'LLVM_CONFIG=/opt/llvm/bin/llvm-config' \
-    'LD_LIBRARY_PATH=/opt/tvm/build:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu' \
+    'LD_LIBRARY_PATH=/opt/tvm/build/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu' \
     'PATH=/opt/conda/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
     > /etc/environment
 
