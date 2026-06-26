@@ -4,6 +4,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG TVM_REF=v0.25.0
 ARG PYTORCH_CUDA=cu130
 ARG VLLM_VERSION=0.23.0
+ARG SGLANG_VERSION=0.5.13.post1
 
 ENV CONDA_DIR=/opt/conda
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -107,7 +108,8 @@ RUN cmake -S ${TVM_HOME} -B ${TVM_HOME}/build -G Ninja \
     python -m pip install -e ${TVM_HOME};
 
 RUN python -m pip install --index-url ${PYTORCH_INDEX_URL} torch torchvision torchaudio && \
-    python -m pip install vllm==${VLLM_VERSION}
+    python -m pip install vllm==${VLLM_VERSION} && \
+    python -m pip install sglang==${SGLANG_VERSION}
 
 RUN echo ". ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate base" >> /etc/skel/.bashrc && \
     echo ". ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate base" >> ~/.bashrc && \
@@ -128,7 +130,7 @@ RUN printf '%s\n' \
     'PYTHONPATH=/opt/tvm/python' \
     'CONDA_DIR=/opt/conda' \
     'LLVM_CONFIG=/opt/llvm/bin/llvm-config' \
-    'LD_LIBRARY_PATH=/opt/tvm/build/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu' \
+    'LD_LIBRARY_PATH=/opt/tvm/build/lib:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib' \
     'PATH=/opt/conda/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
     > /etc/environment
 
