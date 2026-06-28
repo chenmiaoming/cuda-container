@@ -1,4 +1,4 @@
-FROM docker.io/nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
+FROM docker.io/nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TVM_REF=v0.25.0
@@ -28,9 +28,6 @@ RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recomme
     gnupg \
     git \
     tini \
-    libcudnn9-cuda-13=9.13.0.50-1 \
-    libcudnn9-dev-cuda-13=9.13.0.50-1 \
-    libcudnn9-headers-cuda-13=9.13.0.50-1 \
     build-essential \
     cmake \
     ninja-build \
@@ -46,10 +43,6 @@ RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recomme
     libopenblas-dev \
     libxml2-dev \
     pkg-config \
-    && apt-mark hold \
-    libcudnn9-cuda-13 \
-    libcudnn9-dev-cuda-13 \
-    libcudnn9-headers-cuda-13 \
     && apt-get clean && rm -rf /var/lib/apt/lists/* 
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget gnupg && \
@@ -121,7 +114,7 @@ RUN echo ". ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate base" >> /etc/
     mkdir -p /var/run/sshd
 
 RUN printf '%s\n' \
-    'CUDA_VERSION=13.0.1' \
+    'CUDA_VERSION=13.0.2' \
     'NVIDIA_DRIVER_CAPABILITIES=compute,utility' \
     'NVIDIA_PRODUCT_NAME=CUDA' \
     'NVARCH=x86_64' \

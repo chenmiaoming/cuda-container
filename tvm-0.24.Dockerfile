@@ -1,4 +1,4 @@
-FROM docker.io/nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
+FROM docker.io/nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG TVM_REF=v0.24.0
