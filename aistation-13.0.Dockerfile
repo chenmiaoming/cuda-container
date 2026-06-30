@@ -5,7 +5,7 @@ ARG TVM_REF=v0.25.0
 ARG PYTORCH_CUDA=cu130
 ARG VLLM_VERSION=0.23.0
 ARG SGLANG_VERSION=0.5.13.post1
-ARG PYTHON_VERSION=3.11
+ARG PYTHON_VERSION=3.12
 
 ENV CONDA_DIR=/opt/conda
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -40,6 +40,7 @@ RUN apt-get update && apt-get install -y --allow-downgrades --no-install-recomme
     libopenblas-dev \
     libxml2-dev \
     pkg-config \
+    skopeo \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ---------- nsight systems ----------
@@ -109,18 +110,24 @@ RUN conda create -y -n tvm python=${PYTHON_VERSION} pip && \
 
 # ---------- conda env: vllm ----------
 RUN conda create -y -n vllm python=${PYTHON_VERSION} pip && \
-    conda run -n vllm --no-capture-output pip install --upgrade pip setuptools wheel && \
-    conda run -n vllm --no-capture-output pip install --index-url ${PYTORCH_INDEX_URL} \
-    torch torchvision torchaudio && \
-    conda run -n vllm --no-capture-output pip install vllm==${VLLM_VERSION} && \
+    conda run -n vllm --no-capture-output pip install --upgrade pip setuptools wheel uv && \
+    conda run -n vllm --no-capture-output uv pip install \
+    --python ${CONDA_DIR}/envs/vllm/bin/python \
+    --torch-backend=cu130 \
+    vllm==${VLLM_VERSION} && \
+    conda run -n vllm --no-capture-output python -c "import torch, vllm; print('torch:', torch.__version__); print('torch cuda:', torch.version.cuda); print('vllm:', vllm.__version__)" && \
     conda clean --all --yes
+
 
 # ---------- conda env: sglang ----------
 RUN conda create -y -n sglang python=${PYTHON_VERSION} pip && \
-    conda run -n sglang --no-capture-output pip install --upgrade pip setuptools wheel && \
-    conda run -n sglang --no-capture-output pip install --index-url ${PYTORCH_INDEX_URL} \
-    torch torchvision torchaudio && \
-    conda run -n sglang --no-capture-output pip install sglang==${SGLANG_VERSION} && \
+    conda run -n sglang --no-capture-output pip install --upgrade pip setuptools wheel uv && \
+    conda run -n sglang --no-capture-output uv pip install \
+    --python ${CONDA_DIR}/envs/sglang/bin/python \
+    --torch-backend=cu130 \
+    --prerelease=allow \
+    sglang==${SGLANG_VERSION} && \
+    conda run -n sglang --no-capture-output python -c "import torch, sglang; print('torch:', torch.__version__); print('torch cuda:', torch.version.cuda); print('sglang:', sglang.__version__)" && \
     conda clean --all --yes
 
 # ---------- SSH + shell setup ----------
