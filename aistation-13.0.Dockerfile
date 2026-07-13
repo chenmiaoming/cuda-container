@@ -1,6 +1,7 @@
-FROM docker.io/nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
+FROM docker.io/nvidia/cuda:13.3.0-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG CUDA_COMPAT_PACKAGE=cuda-compat-13-3
 ARG TVM_REF=v0.25.0
 ARG TVM_HOME=/opt/tvm
 ARG LLVM_PREFIX=/opt/llvm
@@ -11,15 +12,20 @@ ARG SGLANG_VERSION=0.5.14
 ARG PYTHON_VERSION=3.12
 
 ENV CONDA_DIR=/opt/conda
+ENV CUDA_HOME=/usr/local/cuda-13.3
+ENV CUDA_PATH=/usr/local/cuda-13.3
+ENV CUDA_COMPAT_PATH=/usr/local/cuda-13.3/compat
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 ENV PIP_NO_CACHE_DIR=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTORCH_INDEX_URL=https://download.pytorch.org/whl/${PYTORCH_CUDA}
-ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib
-ENV PATH=${CONDA_DIR}/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV FLASHINFER_USE_CUDA_NORM=1
+ENV LD_LIBRARY_PATH=${CUDA_COMPAT_PATH}:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:${CUDA_HOME}/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib
+ENV PATH=${CONDA_DIR}/bin:/usr/local/nvidia/bin:${CUDA_HOME}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # ---------- system packages (no python) ----------
-RUN apt-get update && apt-get install -y  --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ${CUDA_COMPAT_PACKAGE} \
     openssh-server \
     gdb \
     lldb \
@@ -46,6 +52,13 @@ RUN apt-get update && apt-get install -y  --no-install-recommends \
     numactl \
     ffmpeg \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# cuda-compat is intentionally not registered through ldconfig.
+# The compatibility directory must precede the host-injected NVIDIA paths.
+RUN test -e ${CUDA_COMPAT_PATH}/libcuda.so.1 && \
+    test -e ${CUDA_COMPAT_PATH}/libnvidia-ptxjitcompiler.so.1 && \
+    test -e ${CUDA_COMPAT_PATH}/libnvidia-nvvm.so.4 && \
+    dpkg-query -W -f='${Package} ${Version}\n' ${CUDA_COMPAT_PACKAGE}
 
 # ---------- nsight systems ----------
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates wget gnupg && \
@@ -194,14 +207,49 @@ RUN echo ". ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate base" >> /etc/
 
 # ---------- /etc/environment for SSH sessions ----------
 RUN printf '%s\n' \
-    'CUDA_VERSION=13.0.2' \
+    'CUDA_VERSION=13.3.0' \
+    'CUDA_HOME=/usr/local/cuda-13.3' \
+    'CUDA_PATH=/usr/local/cuda-13.3' \
+    'CUDA_COMPAT_PATH=/usr/local/cuda-13.3/compat' \
     'NVIDIA_DRIVER_CAPABILITIES=compute,utility' \
     'NVIDIA_PRODUCT_NAME=CUDA' \
     'NVARCH=x86_64' \
     'CONDA_DIR=/opt/conda' \
-    'LD_LIBRARY_PATH=/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib' \
-    'PATH=/opt/conda/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
+    'FLASHINFER_USE_CUDA_NORM=1' \
+    'LD_LIBRARY_PATH=/usr/local/cuda-13.3/compat:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda-13.3/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib' \
+    'PATH=/opt/conda/bin:/usr/local/nvidia/bin:/usr/local/cuda-13.3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' \
     > /etc/environment
+
+
+# ---------- runtime CUDA/compat diagnostic ----------
+RUN cat > /usr/local/bin/check-cuda-compat <<'PYEOF' && chmod +x /usr/local/bin/check-cuda-compat
+#!/usr/bin/env python3
+import ctypes
+import os
+from pathlib import Path
+
+print("CUDA_HOME:", os.environ.get("CUDA_HOME"))
+print("LD_LIBRARY_PATH:", os.environ.get("LD_LIBRARY_PATH"))
+
+cuda = ctypes.CDLL("libcuda.so.1")
+ret = cuda.cuInit(0)
+print("cuInit return:", ret)
+
+version = ctypes.c_int()
+if ret == 0:
+    rc = cuda.cuDriverGetVersion(ctypes.byref(version))
+    print("cuDriverGetVersion return:", rc)
+    print("Driver API version:", version.value)
+
+for line in Path("/proc/self/maps").read_text(errors="replace").splitlines():
+    if any(name in line for name in (
+        "libcuda.so",
+        "libnvidia-ptxjitcompiler.so",
+        "libnvidia-nvvm.so",
+        "libgpu_partition.so",
+    )):
+        print(line)
+PYEOF
 
 EXPOSE 22
 
