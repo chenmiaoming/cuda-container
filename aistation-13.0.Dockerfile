@@ -290,7 +290,7 @@ RUN mkdir -p \
     'PubkeyAuthentication yes' \
     'KbdInteractiveAuthentication yes' \
     'UsePAM yes' \
-    > /etc/ssh/sshd_config.d/00-aistation.conf && 
+    > /etc/ssh/sshd_config.d/00-aistation.conf
 
 
 # ---------------------------------------------------------------------------
