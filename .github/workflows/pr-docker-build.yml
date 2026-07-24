@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      dockerfile:
+        description: Optional Dockerfile path; leave empty to build all Dockerfiles
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -14,50 +19,129 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: ci-gate
+  prepare:
+    name: Detect Dockerfiles
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Generate build matrix
+        id: matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          files_file="$(mktemp)"
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            requested="${{ inputs.dockerfile }}"
+            if [[ -n "$requested" ]]; then
+              if [[ "$requested" != *.Dockerfile || ! -f "$requested" ]]; then
+                echo "Invalid Dockerfile path: $requested" >&2
+                exit 1
+              fi
+              printf '%s\n' "$requested" > "$files_file"
+            else
+              git ls-files '*.Dockerfile' | sort -u > "$files_file"
+            fi
+          else
+            base_sha="${{ github.event.pull_request.base.sha }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
+
+            git diff --name-only --diff-filter=AM "$base_sha" "$head_sha" > changed-files.txt
+            grep -E '\.Dockerfile$' changed-files.txt | sort -u > "$files_file" || true
+
+            # A workflow-only change still performs one real Docker build.
+            if [[ ! -s "$files_file" ]] && grep -qE '^\.github/workflows/.*\.ya?ml$' changed-files.txt; then
+              printf '%s\n' 'cuda-sshd-13.0.Dockerfile' > "$files_file"
+            fi
+          fi
+
+          matrix='[]'
+          while IFS= read -r file; do
+            [[ -n "$file" ]] || continue
+            [[ -f "$file" ]] || {
+              echo "Dockerfile does not exist at the PR head: $file" >&2
+              exit 1
+            }
+
+            base="$(basename "$file" .Dockerfile)"
+            scope="${base//[^a-zA-Z0-9_.-]/-}"
+            matrix="$(jq -c \
+              --arg file "$file" \
+              --arg scope "$scope" \
+              '. + [{"file": $file, "cache_scope": $scope, "skip": false}]' \
+              <<< "$matrix")"
+          done < "$files_file"
+
+          # Keep the matrix non-empty so the aggregate ci-gate check always exists.
+          if [[ "$matrix" == '[]' ]]; then
+            matrix='[{"file":"no-dockerfile-change","cache_scope":"none","skip":true}]'
+          fi
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Docker build matrix: $matrix"
+
+  build:
+    name: Build ${{ matrix.file }}
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
     strategy:
       fail-fast: false
       matrix:
-        dockerfile:
-          - cuda-sshd-13.0.Dockerfile
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
-      - name: Checkout
+      - name: No Dockerfile build required
+        if: matrix.skip == true
+        run: echo "No Dockerfile or workflow changes require a build."
+
+      - name: Checkout repository
+        if: matrix.skip != true
         uses: actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Detect changed Dockerfiles
-        id: changed
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '\.Dockerfile$'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -qE '^\.github/workflows/'; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Set up Docker Buildx
-        if: steps.changed.outputs.build == 'true'
+        if: matrix.skip != true
         uses: docker/setup-buildx-action@v4
 
-      - name: Build Docker image (no push)
-        if: steps.changed.outputs.build == 'true'
+      - name: Build image without publishing
+        if: matrix.skip != true
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: ${{ matrix.dockerfile }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
           push: false
           outputs: type=cacheonly
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }},ignore-error=true
           provenance: false
           sbom: false
 
-      - name: No Dockerfile changes
-        if: steps.changed.outputs.build == 'false'
-        run: echo "No Dockerfile changes; CI passed."
+  ci-gate:
+    name: ci-gate
+    if: always()
+    needs:
+      - prepare
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify PR Docker build
+        shell: bash
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          set -euo pipefail
+          echo "prepare=$PREPARE_RESULT"
+          echo "build=$BUILD_RESULT"
+          [[ "$PREPARE_RESULT" == "success" ]]
+          [[ "$BUILD_RESULT" == "success" ]]
