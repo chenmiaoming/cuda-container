@@ -94,7 +94,8 @@ jobs:
     name: Build ${{ matrix.file }}
     needs: prepare
     runs-on: ubuntu-latest
-    timeout-minutes: 180
+    # LLVM and TVM source builds can exceed three hours on hosted runners.
+    timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
