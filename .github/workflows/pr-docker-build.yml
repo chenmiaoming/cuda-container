@@ -55,11 +55,13 @@ jobs:
             head_sha="${{ github.event.pull_request.head.sha }}"
 
             git diff --name-only --diff-filter=AM "$base_sha" "$head_sha" > changed-files.txt
-            grep -E '\.Dockerfile$' changed-files.txt | sort -u > "$files_file" || true
 
-            # A workflow-only change still performs one real Docker build.
-            if [[ ! -s "$files_file" ]] && grep -qE '^\.github/workflows/.*\.ya?ml$' changed-files.txt; then
-              printf '%s\n' 'cuda-sshd-13.0.Dockerfile' > "$files_file"
+            # Workflow changes validate the complete CI surface by building every
+            # tracked Dockerfile. Matrix jobs run concurrently by default.
+            if grep -qE '^\.github/workflows/.*\.ya?ml$' changed-files.txt; then
+              git ls-files '*.Dockerfile' | sort -u > "$files_file"
+            else
+              grep -E '\.Dockerfile$' changed-files.txt | sort -u > "$files_file" || true
             fi
           fi
 
