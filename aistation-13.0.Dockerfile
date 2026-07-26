@@ -2,9 +2,8 @@ FROM docker.io/nvidia/cuda:13.3.0-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CUDA_COMPAT_PACKAGE=cuda-compat-13-3
-ARG PYTORCH_CUDA=cu130
-ARG VLLM_VERSION=0.24.0
-ARG SGLANG_VERSION=0.5.14
+ARG VLLM_VERSION=0.25.1
+ARG SGLANG_VERSION=0.5.15.post1
 ARG PYTHON_VERSION=3.12
 ARG FRP_VERSION=0.69.0
 
@@ -16,8 +15,6 @@ ENV CUDA_COMPAT_PATH=/usr/local/cuda/compat
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 ENV PIP_NO_CACHE_DIR=1
-ENV PYTHONUNBUFFERED=1
-ENV FLASHINFER_USE_CUDA_NORM=1
 
 # cuda-compat must precede the host-injected NVIDIA driver libraries.
 ENV LD_LIBRARY_PATH=${CUDA_COMPAT_PATH}:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:${CUDA_HOME}/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib
@@ -123,7 +120,7 @@ RUN apt-get update && \
 # ---------------------------------------------------------------------------
 
 RUN wget --no-hsts --quiet \
-    https://mirrors.ustc.edu.cn/github-release/conda-forge/miniforge/LatestRelease/Miniforge3-Linux-x86_64.sh \
+    https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh \
     -O /tmp/miniforge.sh && \
     /bin/bash /tmp/miniforge.sh \
     -b \
@@ -185,7 +182,6 @@ RUN conda create -y \
     --no-capture-output \
     uv pip install \
     --python ${CONDA_DIR}/envs/vllm/bin/python \
-    --torch-backend=${PYTORCH_CUDA} \
     vllm==${VLLM_VERSION} && \
     conda run \
     -n vllm \
@@ -206,6 +202,9 @@ RUN conda create -y \
     -n sglang \
     python=${PYTHON_VERSION} \
     pip && \
+    conda env config vars set \
+    -n sglang \
+    FLASHINFER_USE_CUDA_NORM=1 && \
     conda run \
     -n sglang \
     --no-capture-output \
@@ -220,7 +219,6 @@ RUN conda create -y \
     --no-capture-output \
     uv pip install \
     --python ${CONDA_DIR}/envs/sglang/bin/python \
-    --torch-backend=${PYTORCH_CUDA} \
     --prerelease=allow \
     --upgrade \
     sglang==${SGLANG_VERSION} && \
@@ -248,8 +246,6 @@ RUN printf '%s\n' \
     'export LANG=C.UTF-8' \
     'export LC_ALL=C.UTF-8' \
     'export PIP_NO_CACHE_DIR=1' \
-    'export PYTHONUNBUFFERED=1' \
-    'export FLASHINFER_USE_CUDA_NORM=1' \
     'export PATH=/opt/conda/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:${PATH:-/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin}' \
     'export LD_LIBRARY_PATH=/usr/local/cuda/compat:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}' \
     > /etc/profile.d/aistation.sh && \
@@ -303,4 +299,4 @@ WORKDIR /workspace
 
 ENTRYPOINT ["tini", "-g", "--"]
 
-CMD ["/usr/sbin/sshd -D -e"]
+CMD ["/usr/sbin/sshd", "-D", "-e"]
