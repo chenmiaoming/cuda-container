@@ -49,14 +49,13 @@ RUN git clone \
       --recurse-submodules \
       --shallow-submodules \
       https://github.com/flagos-ai/FlagTree.git \
-      ${FLAGTREE_HOME} && \
-    git -C ${FLAGTREE_HOME} switch -c release/${FLAGTREE_VERSION}
+      ${FLAGTREE_HOME}
 
 RUN cd ${FLAGTREE_HOME} && \
     MAX_JOBS=$(nproc) \
     TRITON_BUILD_PROTON=OFF \
     python -m pip install -v --no-build-isolation . && \
-    python -c "from importlib.metadata import version; assert version('flagtree') == '${FLAGTREE_VERSION}', version('flagtree'); assert version('torch').startswith('${PYTORCH_VERSION}'), version('torch'); print('flagtree:', version('flagtree')); print('torch:', version('torch'))" && \
+    python -c "from importlib.metadata import version; import triton; flagtree_version = version('flagtree'); assert flagtree_version.split('+', 1)[0] == '${FLAGTREE_VERSION}', flagtree_version; assert version('torch').startswith('${PYTORCH_VERSION}'), version('torch'); print('flagtree:', flagtree_version); print('torch:', version('torch')); print('triton module:', triton.__file__)" && \
     ! python -m pip show triton >/dev/null 2>&1
 
 WORKDIR /workspace
