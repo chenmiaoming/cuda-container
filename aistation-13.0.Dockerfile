@@ -2,7 +2,6 @@ FROM docker.io/nvidia/cuda:13.3.0-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CUDA_COMPAT_PACKAGE=cuda-compat-13-3
-ARG PYTORCH_CUDA=cu130
 ARG VLLM_VERSION=0.25.1
 ARG SGLANG_VERSION=0.5.15.post1
 ARG PYTHON_VERSION=3.12
@@ -121,7 +120,7 @@ RUN apt-get update && \
 # ---------------------------------------------------------------------------
 
 RUN wget --no-hsts --quiet \
-    https://mirrors.ustc.edu.cn/github-release/conda-forge/miniforge/LatestRelease/Miniforge3-Linux-x86_64.sh \
+    https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh \
     -O /tmp/miniforge.sh && \
     /bin/bash /tmp/miniforge.sh \
     -b \
@@ -183,7 +182,6 @@ RUN conda create -y \
     --no-capture-output \
     uv pip install \
     --python ${CONDA_DIR}/envs/vllm/bin/python \
-    --torch-backend=${PYTORCH_CUDA} \
     vllm==${VLLM_VERSION} && \
     conda run \
     -n vllm \
@@ -221,7 +219,6 @@ RUN conda create -y \
     --no-capture-output \
     uv pip install \
     --python ${CONDA_DIR}/envs/sglang/bin/python \
-    --torch-backend=${PYTORCH_CUDA} \
     --prerelease=allow \
     --upgrade \
     sglang==${SGLANG_VERSION} && \
