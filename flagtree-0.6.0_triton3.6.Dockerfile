@@ -55,7 +55,7 @@ RUN git clone \
 RUN cd ${FLAGTREE_HOME} && \
     MAX_JOBS=$(nproc) \
     TRITON_BUILD_PROTON=OFF \
-    python -m pip install --no-build-isolation . && \
+    python -m pip install -v --no-build-isolation . && \
     python -c "from importlib.metadata import version; assert version('flagtree') == '${FLAGTREE_VERSION}', version('flagtree'); assert version('torch').startswith('${PYTORCH_VERSION}'), version('torch'); print('flagtree:', version('flagtree')); print('torch:', version('torch'))" && \
     ! python -m pip show triton >/dev/null 2>&1
 
