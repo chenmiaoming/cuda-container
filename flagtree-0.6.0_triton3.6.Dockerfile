@@ -22,10 +22,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cmake \
     git \
     ninja-build \
+    openssh-server \
     python3 \
     python3-dev \
     python3-pip \
     python3-venv \
+    tini \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m venv ${VENV_DIR} && \
@@ -58,6 +61,23 @@ RUN cd ${FLAGTREE_HOME} && \
     python -c "from importlib.metadata import version; import triton; flagtree_version = version('flagtree'); assert flagtree_version.split('+', 1)[0] == '${FLAGTREE_VERSION}', flagtree_version; assert version('torch').startswith('${PYTORCH_VERSION}'), version('torch'); print('flagtree:', flagtree_version); print('torch:', version('torch')); print('triton module:', triton.__file__)" && \
     ! python -m pip show triton >/dev/null 2>&1
 
+# Keep root authentication available for credentials injected by the hosting
+# platform. The image itself does not initialize or overwrite the root password.
+RUN mkdir -p \
+      /etc/ssh/sshd_config.d \
+      /run/sshd && \
+    printf '%s\n' \
+      'PermitRootLogin yes' \
+      'PasswordAuthentication yes' \
+      'PubkeyAuthentication yes' \
+      'KbdInteractiveAuthentication yes' \
+      'UsePAM yes' \
+      > /etc/ssh/sshd_config.d/00-flagtree.conf
+
+EXPOSE 22
+
 WORKDIR /workspace
 
-CMD ["/bin/bash"]
+ENTRYPOINT ["tini", "-g", "--"]
+
+CMD ["/usr/sbin/sshd", "-D", "-e"]
