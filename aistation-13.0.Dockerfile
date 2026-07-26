@@ -238,7 +238,7 @@ RUN conda run \
     -DUSE_CUDA=ON \
     -DUSE_CUDNN=ON \
     -DUSE_CUBLAS=ON \
-    -DUSE_LLVM="${CONDA_DIR}/envs/tvm/bin/llvm-config --ignore-libllvm --link-static" \
+    -DUSE_LLVM=${CONDA_DIR}/envs/tvm/bin/llvm-config \
     -DHIDE_PRIVATE_SYMBOLS=ON \
     -DUSE_RPC=ON && \
     conda run \
