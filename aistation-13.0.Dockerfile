@@ -175,7 +175,8 @@ RUN conda create -y \
     "llvmdev=${LLVM_VERSION}" \
     "cmake>=3.24" \
     ninja \
-    zlib && \
+    zlib \
+    libxml2 && \
     conda run \
     -n tvm \
     --no-capture-output \
