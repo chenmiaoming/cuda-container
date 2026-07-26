@@ -2,6 +2,10 @@ FROM docker.io/nvidia/cuda:13.3.0-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG CUDA_COMPAT_PACKAGE=cuda-compat-13-3
+ARG TVM_REF=v0.25.0
+ARG LLVM_VERSION=21
+ARG PYTORCH_CUDA=cu132
+ARG PYTORCH_VERSION=2.13.0
 ARG VLLM_VERSION=0.25.1
 ARG SGLANG_VERSION=0.5.15.post1
 ARG PYTHON_VERSION=3.12
@@ -155,6 +159,119 @@ RUN wget --no-hsts --quiet \
     --force-pkgs-dirs \
     --all \
     --yes
+
+
+# ---------------------------------------------------------------------------
+# Conda environment: TVM
+#
+# LLVM, the TVM Python dependencies, and PyTorch all live in this environment.
+# The cu132 wheel is pinned and verified without requiring a GPU.
+# ---------------------------------------------------------------------------
+
+RUN conda create -y \
+    -n tvm \
+    python=${PYTHON_VERSION} \
+    pip \
+    "llvmdev=${LLVM_VERSION}" \
+    "cmake>=3.24" \
+    ninja && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    pip install \
+    --upgrade \
+    pip \
+    setuptools \
+    wheel && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    pip install \
+    ml_dtypes \
+    numpy \
+    cython \
+    typing_extensions \
+    tornado \
+    psutil \
+    'xgboost>=1.1.0' \
+    cloudpickle && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    pip install \
+    --index-url https://download.pytorch.org/whl/${PYTORCH_CUDA} \
+    "torch==${PYTORCH_VERSION}" && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    llvm-config --version && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    python -c \
+    "import torch; print('torch:', torch.__version__); print('torch cuda:', torch.version.cuda); assert torch.version.cuda == '13.2'" && \
+    conda clean --all --yes
+
+
+# ---------------------------------------------------------------------------
+# Apache TVM v0.25 source and CUDA build
+# ---------------------------------------------------------------------------
+
+RUN git clone \
+    --branch ${TVM_REF} \
+    --depth 1 \
+    https://github.com/apache/tvm.git \
+    /opt/tvm && \
+    cd /opt/tvm && \
+    git submodule update --init --recursive
+
+RUN conda run \
+    -n tvm \
+    --no-capture-output \
+    cmake \
+    -S /opt/tvm \
+    -B /opt/tvm/build \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DUSE_CUDA=ON \
+    -DUSE_CUDNN=ON \
+    -DUSE_CUBLAS=ON \
+    -DUSE_LLVM="${CONDA_DIR}/envs/tvm/bin/llvm-config --ignore-libllvm --link-static" \
+    -DHIDE_PRIVATE_SYMBOLS=ON \
+    -DUSE_RPC=ON && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    cmake \
+    --build /opt/tvm/build \
+    --parallel "$(nproc)" && \
+    test -f /opt/tvm/build/lib/libtvm_compiler.so && \
+    test -f /opt/tvm/build/lib/libtvm_runtime.so && \
+    test -f /opt/tvm/build/lib/libtvm_runtime_cuda.so && \
+    test -f /opt/tvm/build/lib/libtvm_runtime_extra.so
+
+RUN conda run \
+    -n tvm \
+    --no-capture-output \
+    pip install \
+    /opt/tvm/3rdparty/tvm-ffi && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    python -c \
+    "from pathlib import Path; import site; Path(site.getsitepackages()[0], 'apache-tvm-source.pth').write_text('/opt/tvm/python\n', encoding='utf-8')" && \
+    conda env config vars set \
+    -n tvm \
+    TVM_HOME=/opt/tvm \
+    TVM_LIBRARY_PATH=/opt/tvm/build/lib \
+    LLVM_CONFIG=${CONDA_DIR}/envs/tvm/bin/llvm-config \
+    LD_LIBRARY_PATH=/opt/tvm/build/lib:${CONDA_DIR}/envs/tvm/lib:${CUDA_COMPAT_PATH}:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:${CUDA_HOME}/lib64:/usr/lib/x86_64-linux-gnu:/usr/local/lib && \
+    conda run \
+    -n tvm \
+    --no-capture-output \
+    python -c \
+    "import torch, tvm; info=tvm.support.libinfo(); print('tvm:', tvm.__version__); print('llvm:', info.get('LLVM_VERSION')); print('torch:', torch.__version__); print('torch cuda:', torch.version.cuda); assert tvm.__version__.startswith('0.25'); assert info.get('USE_CUDA') == 'ON'; assert torch.version.cuda == '13.2'" && \
+    conda clean --all --yes
 
 
 # ---------------------------------------------------------------------------
