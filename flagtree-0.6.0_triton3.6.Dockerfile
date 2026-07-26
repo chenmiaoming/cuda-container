@@ -2,17 +2,15 @@ FROM docker.io/nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG FLAGTREE_VERSION=0.6.0
-ARG PYTHON_VERSION=3.12
 ARG PYTORCH_VERSION=2.10.0
 ARG PYTORCH_CUDA=cu130
 
-ENV CONDA_DIR=/opt/conda
 ENV VENV_DIR=/opt/flagtree-venv
 ENV FLAGTREE_HOME=/opt/flagtree
 ENV CUDA_HOME=/usr/local/cuda
 ENV PIP_NO_CACHE_DIR=1
 ENV PYTHONUNBUFFERED=1
-ENV PATH=${VENV_DIR}/bin:${CONDA_DIR}/bin:${CUDA_HOME}/bin:${PATH}
+ENV PATH=${VENV_DIR}/bin:${CUDA_HOME}/bin:${PATH}
 ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
 
 # FlagTree is a Triton fork. PyTorch is installed first so that its matching
@@ -31,7 +29,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python3 -m venv ${VENV_DIR} && \
-    python -m pip install --upgrade pip setuptools wheel uv
+    python -m pip install --upgrade \
+      pip \
+      setuptools \
+      wheel \
+      uv \
+      'pybind11>=2.13.1'
 
 RUN uv pip install \
       --python ${VENV_DIR}/bin/python \
