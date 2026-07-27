@@ -75,22 +75,20 @@ jobs:
             }
 
             base="$(basename "$file" .Dockerfile)"
-            scope="${base//[^a-zA-Z0-9_.-]/-}"
             name="${base%-*}"
             version="${base##*-}"
             owner="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
             cache_ref="ghcr.io/${owner}/${name}:buildcache-${version}"
             matrix="$(jq -c \
               --arg file "$file" \
-              --arg scope "$scope" \
               --arg cache_ref "$cache_ref" \
-              '. + [{"file": $file, "cache_scope": $scope, "registry_cache": $cache_ref, "skip": false}]' \
+              '. + [{"file": $file, "registry_cache": $cache_ref, "skip": false}]' \
               <<< "$matrix")"
           done < "$files_file"
 
           # Keep the matrix non-empty so the aggregate ci-gate check always exists.
           if [[ "$matrix" == '[]' ]]; then
-            matrix='[{"file":"no-dockerfile-change","cache_scope":"none","registry_cache":"none","skip":true}]'
+            matrix='[{"file":"no-dockerfile-change","registry_cache":"none","skip":true}]'
           fi
 
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
@@ -138,10 +136,7 @@ jobs:
           platforms: linux/amd64
           push: false
           outputs: type=cacheonly
-          cache-from: |
-            type=registry,ref=${{ matrix.registry_cache }}
-            type=gha,scope=${{ matrix.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }},ignore-error=true
+          cache-from: type=registry,ref=${{ matrix.registry_cache }}
           provenance: false
           sbom: false
 
