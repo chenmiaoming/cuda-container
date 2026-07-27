@@ -103,6 +103,8 @@ jobs:
           echo "image=$IMAGE_NAME" >> $GITHUB_OUTPUT
           # 按照要求输出: (version)-(builddate)
           echo "tag=${{ matrix.version }}-$BUILD_DATE" >> $GITHUB_OUTPUT
+          # Registry cache 独立于发布标签，并由 main 构建持续更新。
+          echo "cache_ref=$IMAGE_NAME:buildcache-${{ matrix.version }}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
@@ -111,8 +113,8 @@ jobs:
           file: ${{ matrix.file }}
           push: true
           platforms: linux/amd64
-          cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.version }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.version }}
+          cache-from: type=registry,ref=${{ steps.meta.outputs.cache_ref }}
+          cache-to: type=registry,ref=${{ steps.meta.outputs.cache_ref }},mode=max,ignore-error=true
           provenance: false
           sbom: false
           # 按照 (name):(version)-(builddate) 格式推送。
