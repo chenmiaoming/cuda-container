@@ -8,6 +8,7 @@ ARG PYTORCH_CUDA=cu132
 ARG PYTORCH_VERSION=2.13.0
 ARG VLLM_VERSION=0.25.1
 ARG SGLANG_VERSION=0.5.15.post1
+ARG CUTILE_VERSION=1.5.0
 ARG PYTHON_VERSION=3.12
 ARG FRP_VERSION=0.69.0
 
@@ -273,6 +274,41 @@ RUN conda run \
     --no-capture-output \
     python -c \
     "import torch, tvm; info=tvm.support.libinfo(); print('tvm:', tvm.__version__); print('llvm:', info.get('LLVM_VERSION')); print('torch:', torch.__version__); print('torch cuda:', torch.version.cuda); assert tvm.__version__.startswith('0.25'); assert info.get('USE_CUDA') == 'ON'; assert torch.version.cuda == '13.2'" && \
+    conda clean --all --yes
+
+
+# ---------------------------------------------------------------------------
+# Conda environment: cuTile
+#
+# cuTile and its TileIR compiler toolchain are isolated in this environment.
+# The build-time check imports the Python API without initializing a GPU.
+# ---------------------------------------------------------------------------
+
+RUN conda create -y \
+    -n cutile \
+    python=${PYTHON_VERSION} \
+    pip && \
+    conda run \
+    -n cutile \
+    --no-capture-output \
+    pip install \
+    --upgrade \
+    pip \
+    setuptools \
+    wheel && \
+    conda run \
+    -n cutile \
+    --no-capture-output \
+    pip install \
+    "cuda-tile[tileiras]==${CUTILE_VERSION}" \
+    cupy-cuda13x \
+    numpy \
+    pytest && \
+    conda run \
+    -n cutile \
+    --no-capture-output \
+    python -c \
+    "from importlib.metadata import version; import cuda.tile as ct; cutile=version('cuda-tile'); tileiras=version('nvidia-cuda-tileiras'); nvcc=version('nvidia-cuda-nvcc'); nvvm=version('nvidia-nvvm'); print('cuda-tile:', cutile); print('cuda.tile:', ct.__file__); print('tileiras:', tileiras); print('nvcc:', nvcc); print('nvvm:', nvvm); print('cupy:', version('cupy-cuda13x')); assert cutile == '${CUTILE_VERSION}'; assert tileiras.split('.')[:2] == nvcc.split('.')[:2] == nvvm.split('.')[:2]" && \
     conda clean --all --yes
 
 
